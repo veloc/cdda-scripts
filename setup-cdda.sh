@@ -4,9 +4,13 @@
 # Line 117:	GIT DOWNLOADING PART
 #		determine if the user entered basenamepath or
 #		a downloadpath with added branch and getting
-#		both separated
+#		both separated. These are needed to (at least)
+#		to enter the folder where cdda will be built.
+#
 # Line 202:	SWITCH CASE
-#		Add cases 3 to 7 and the needed functions	
+#		Add cases 4 to 7 and the needed functions	
+# 
+# General:	UPDATE VARIABLE AND FUNCTION EXPLANATION
 ########################################################
 # Variables:
 # wanted_cdda 		= CDDA Version to pull from GIT
@@ -18,7 +22,7 @@
 # deperror		= set to value if dependency is missing
 # packages		= list of packages to check
 # missing		= list of missing packages
-# criticalerror		= Critical error, pogram abort
+# criticalerror		= Critical error, pogram abort (or chosen exit)
 # tasks			= List of available tasks
 # task			= task to run
 ########################################################
@@ -35,6 +39,7 @@
 # criterr()		= Sets $criticalerror to 1
 ########################################################
 # version history:
+# v.0.0.4 pushed to github: https://github.com/veloc/cdda-scripts.git
 # v.0.0.3 adding switch/case menu for task selection and creating functions (fr)
 # v.0.0.2 added some colours and the check for required packages (fr)
 # v.0.0.1 creation phase (fr)
@@ -43,7 +48,7 @@
 # STUFF
 ########################################################
 # declaring variables
-version="v.0.0.3"
+version="v.0.0.4"
 error="0"
 SCRIPTPATH=`pwd -P`
 packages="vim git gcc make autogen autoconf libncurses5 libncursesw5 libncursesw5-dev libncursesw5-dev bison flex sqlite3 libsqlite3-dev"
@@ -58,6 +63,8 @@ deperrormsg="Error: $package not installed!"
 welcomemsg="This script will (sometime in the future) download, [merge?,] compile and setup a chroot enviroment for Cataclysm-DDA with _shared Worlds_\n\nCurrent Version:\t$version\n\n"
 continue="Press [Enter] key to continue, press [CTRL+C] to cancel."
 
+# Error MSGs
+nocddadirgiven="\e[31mError\e[37m: No CDDA Dir given. Please run Step (2) first!\n\n"
 
 # FUNCTIONS
 ########################################################
@@ -120,12 +127,12 @@ dldda()
   fi
 
 # getting the short version of the Git Repo
-  if [ "$wanted_cdda" -ne 1 ]; then
-   wanted_cdda_short=$(basename $wanted_cdda .git)
-  else
-   wanted_cdda_branch=$(echo "$wanted_cdda{@: -1}")
-   wanted_cdda=$(echo "$wanted_cdda{1}")
-  fi
+#  if [ "$wanted_cdda" -ne 1 ]; then
+#   wanted_cdda_short=$(basename $wanted_cdda .git)
+#  else
+#   wanted_cdda_branch=$(echo "$wanted_cdda{@: -1}")
+#   wanted_cdda=$(echo "$wanted_cdda{1}")
+#  fi
 
 # Where shall we download it to?
   echo "please enter full target path for the CDDA download, default is [ $HOME/CDDA/ ]:"
@@ -172,6 +179,22 @@ criterr()
   printf "Exiting, Good Bye!\n\n"
  }
 
+compilestuff()
+ {
+  cd $target_dir
+  make
+ }
+
+comp_cdda()
+ {
+  if [ "$target_cdda" == "" ]; then
+   printf "$nocddadirgiven"
+  else
+   target_dir="$target_cdda"
+   compilestuff
+  fi
+ }
+
 # MORE STUFF
 ########################################################
 # Welcome
@@ -204,6 +227,7 @@ while [ "$criticalerror" == "0" ]
   case $tasksel in
    1) checkpackages;;
    2) dldda;;
+   3) comp_cdda;;
    8) criterr;;
    *) printf "dum-di-dum";;
   esac 

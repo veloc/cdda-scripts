@@ -51,7 +51,7 @@
 version="v.0.0.4"
 error="0"
 SCRIPTPATH=`pwd -P`
-packages="vim git gcc make autogen autoconf libncurses5 libncursesw5 libncursesw5-dev libncursesw5-dev bison flex sqlite3 libsqlite3-dev"
+packages="libncurses5-dev git-core g++ make autogen autoconf libncurses5 libncursesw5 libncursesw5-dev libncursesw5-dev bison flex sqlite3 libsqlite3-dev"
 criticalerror="0"
 checkdeptask="Check Dependencies"
 tasks="Check_dependencies Download_Cataclysm-DDA Compile_Cataclysm-DDA Download_dgamelaunch Compile_dgamelaunch set-up_game Everything QUIT" 
@@ -128,7 +128,7 @@ dldda()
 
 # getting the short version of the Git Repo
 #  if [ "$wanted_cdda" -ne 1 ]; then
-#   wanted_cdda_short=$(basename $wanted_cdda .git)
+   wanted_cdda_short=$(basename $wanted_cdda .git)
 #  else
 #   wanted_cdda_branch=$(echo "$wanted_cdda{@: -1}")
 #   wanted_cdda=$(echo "$wanted_cdda{1}")
@@ -169,7 +169,6 @@ dldda()
    cd "$target_cdda"
    echo -e "\n Now cloning $wanted_cdda into $target_cdda\n"
    git clone $wanted_cdda
-   cd $wanted_cdda_short 
   fi
  }
 
@@ -190,7 +189,7 @@ comp_cdda()
   if [ "$target_cdda" == "" ]; then
    printf "$nocddadirgiven"
   else
-   target_dir="$target_cdda"
+   target_dir="$target_cdda/$wanted_cdda_short"
    compilestuff
   fi
  }

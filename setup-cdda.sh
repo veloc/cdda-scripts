@@ -50,28 +50,28 @@
 # declaring variables
 version="v.0.0.4"
 error="0"
-SCRIPTPATH=`pwd -P`
-packages="libncurses5-dev git-core g++ make autogen autoconf libncurses5 libncursesw5 libncursesw5-dev libncursesw5-dev bison flex sqlite3 libsqlite3-dev"
 criticalerror="0"
+packages="libncurses5-dev git-core g++ make autogen autoconf libncurses5 libncursesw5 libncursesw5-dev libncursesw5-dev bison flex sqlite3 libsqlite3-dev"
 checkdeptask="Check Dependencies"
 tasks="Check_dependencies Download_Cataclysm-DDA Compile_Cataclysm-DDA Download_dgamelaunch Compile_dgamelaunch set-up_game Everything QUIT" 
 
 # strings
 depmissingmsg="\e[31mMissing!\e[37m"
-depokmsg="\e[32mOK!\e[37m"
-deperrormsg="Error: $package not installed!"
+depokmsg="\e[32mInstalled!\e[37m"
 welcomemsg="This script will (sometime in the future) download, [merge?,] compile and setup a chroot enviroment for Cataclysm-DDA with _shared Worlds_\n\nCurrent Version:\t$version\n\n"
 continue="Press [Enter] key to continue, press [CTRL+C] to cancel."
 
 # Error MSGs
+generrormsg="\e[31mError\e[37m:"
 nocddadirgiven="\e[31mError\e[37m: No CDDA Dir given. Please run Step (2) first!\n\n"
+deperrormsg="$generrormsg Dependencies missing!\nPlease run the following command to install the missing dependencies and try again:\n\n\taptitude install $missing\n\n"
 
 # FUNCTIONS
 ########################################################
 checkpackages() 
 {
- printf "you have selected %s" $tasksel
- printf "now checking for dependencies..."
+ printf "you have selected %s, " $tasksel
+ printf "now checking for dependencies...\n"
  read -p "$continue"
 
 # checking for required packages:
@@ -96,11 +96,10 @@ checkpackages()
  if [ "$deperror" == "1" ]; then
   printf  "Shall we install the missing dependencies? (y)es or (n)o:\n"
   read installdeps
-  printf "\nyou entered %s\n" $installdeps
 
   if [ "$installdeps" == "n" ]; then
    criticalerror="1"
-   printf "Error: Dependencies missing!\nPlease run the following command to install the missing dependencies and try again:\n\n\taptitude install $missing\n\n"
+   printf "$deperrormsg"
 
   elif [ "$installdeps" == "y" ]; then
    printf "installing dependencies:\n$missing\n"
@@ -122,17 +121,22 @@ dldda()
   echo "please enter the desired CDDA-Version (Git Link, default is [ https://github.com/C0DEHERO/Cataclysm-DDA.git ]):"
   read wanted_cdda
   [ -z "$wanted_cdda" ] && echo -e "You entered nothing, we´ll use https://github.com/C0DEHERO/Cataclysm-DDA.git\n" || echo -e "You entered $wanted_cdda\n" 
-  if [$wanted_cdda == ""]; then
-   wanted_cdda="https://github.com/C0DEHERO/Cataclysm-DDA.git"
-  fi
+#  if [ "$wanted_cdda" == ""]; then
+#   wanted_cdda="https://github.com/C0DEHERO/Cataclysm-DDA.git"
+#  fi
 
 # getting the short version of the Git Repo
-#  if [ "$wanted_cdda" -ne 1 ]; then
+  if [ "$(echo $wanted_cdda | wc -w)" == "1" ]; then
    wanted_cdda_short=$(basename $wanted_cdda .git)
-#  else
-#   wanted_cdda_branch=$(echo "$wanted_cdda{@: -1}")
-#   wanted_cdda=$(echo "$wanted_cdda{1}")
-#  fi
+  elif [ "$(echo $wanted_cdda | wc -w)" == "2" ]; then
+   wanted_cdda_branch=$(echo "$wanted_cdda" | awk '{ print $(NF) }')
+   wanted_cdda=$(echo "$wanted_cdda" | awk '{ print $(1) }')
+   wanted_cdda_short=$(basename $wanted_cdda .git)
+  else
+   printf "Invalid entry! Using the default..."
+   wanted_cdda="https://github.com/C0DEHERO/Cataclysm-DDA.git"
+   wanted_cdda_short=$(basename $wanted_cdda .git)
+  fi
 
 # Where shall we download it to?
   echo "please enter full target path for the CDDA download, default is [ $HOME/CDDA/ ]:"
@@ -143,9 +147,15 @@ dldda()
   fi
 
 # now summarizing settings
-  echo -e "\nChosen Settings:"
-  echo -e "\nDownload Version:\t$wanted_cdda"
-  echo -e "Target Directory:\t$target_cdda"
+  printf "\nChosen Settings:"
+
+  if [ -n "$wanted_cdda_branch" ]; then
+   printf "\nDownload Version:\t$wanted_cdda\nBranch: $wanted_cdda_branch"
+  else
+   printf "\nDownload Version:\t$wanted_cdda"
+  fi 
+
+  printf "\nTarget Directory:\t$target_cdda"
 
 # check if folder settings are valid
 # todo: check if entry is spelled correctly
@@ -168,7 +178,12 @@ dldda()
    mkdir -p "$target_cdda"
    cd "$target_cdda"
    echo -e "\n Now cloning $wanted_cdda into $target_cdda\n"
-   git clone $wanted_cdda
+
+   if [ -n "$wanted_cdda_branch" ]; then
+    git clone $wanted_cdda_branch $wanted_cdda
+   else
+    git clone $wanted_cdda
+   fi 
   fi
  }
 
@@ -222,13 +237,17 @@ while [ "$criticalerror" == "0" ]
   printf "Please make your selection by entering the coresponding number, default is [1]: "
   read tasksel
 
+  if [ "$tasksel" == "" ]; then
+   tasksel="1"
+  fi
+
 #switch case for task selection
   case $tasksel in
    1) checkpackages;;
    2) dldda;;
    3) comp_cdda;;
    8) criterr;;
-   *) printf "dum-di-dum";;
+   *) printf "\n$generrormsg No valid Entry, please try again\n";;
   esac 
 
 # What version shall we download?

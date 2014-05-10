@@ -32,11 +32,16 @@
 # depokmsg		= green formatted dependency ok message
 # welcomemsg		= welcome message
 # continue		= standard waiting for input message
+# novalmsg		= message that user-input is not as expeected
+# getddalinkmsg		= message that asks for dda download link
 ########################################################
 # Functions:
-# checkpackages()	= Checks for required packages in $packages
-# dldda()		= downloads Cataclysm-DDA Source from git
-# criterr()		= Sets $criticalerror to 1
+# check_packages()	= Checks for required packages in $packages
+# dl_dda()		= downloads Cataclysm-DDA Source from git
+# crit_err()		= Sets $criticalerror to 1
+# comp_stuff()		= general compile command
+# comp_dda()		= compile dda with comp_stuff()
+# dl_dgamelaunch()	= should download dgamelaunch from git
 ########################################################
 # version history:
 # v.0.0.4 pushed to github: https://github.com/veloc/cdda-scripts.git
@@ -55,23 +60,37 @@ packages="libncurses5-dev git-core g++ make autogen autoconf libncurses5 libncur
 checkdeptask="Check Dependencies"
 tasks="Check_dependencies Download_Cataclysm-DDA Compile_Cataclysm-DDA Download_dgamelaunch Compile_dgamelaunch set-up_game Everything QUIT" 
 
+#setting default values
+defaultddagit="https://github.com/C0DEHERO/Cataclysm-DDA.git"
+defaultdgamegit="https://github.com/C0DEHERO/dgamelaunch.git"
+defaultddatarget="$HOME/CDDA/"
+defaultdgametarget="$HOME/dgamelaunch/"
+
 # strings
 depmissingmsg="\e[31mMissing!\e[37m"
 depokmsg="\e[32mInstalled!\e[37m"
 welcomemsg="This script will (sometime in the future) download, [merge?,] compile and setup a chroot enviroment for Cataclysm-DDA with _shared Worlds_\n\nCurrent Version:\t$version\n\n"
 continue="Press [Enter] key to continue, press [CTRL+C] to cancel."
+getlinkmsgstr="Please enter the Version to clone as a Git Link, default is"
+getddalinkmsg="$getlinkmsgstr [ $defaultddagit ]:"
+getdgamelinkmsg="$getlinkmsgstr [ $defaultdgamegit ]:"
+gettargetmsgstr="Please enter full target path for the download, default is"
+getddatargetmsg="$gettargetmsgstr [ $defaultddatarget ]:"
+getdgametarget="$gettargetmsgstr [ $defaultdgametarget ]:"
 
 # Error MSGs
 generrormsg="\e[31mError\e[37m:"
 nocddadirgiven="\e[31mError\e[37m: No CDDA Dir given. Please run Step (2) first!\n\n"
 deperrormsg="$generrormsg Dependencies missing!\nPlease run the following command to install the missing dependencies and try again:\n\n\taptitude install $missing\n\n"
+novalmsg="No valid Entry!"
 
 # FUNCTIONS
 ########################################################
-checkpackages() 
+check_packages() 
 {
- printf "you have selected %s, " $tasksel
- printf "now checking for dependencies...\n"
+ clear
+ printf "You have selected %s, " $tasksel
+ printf "Now checking for dependencies...\n"
  read -p "$continue"
 
 # checking for required packages:
@@ -107,7 +126,7 @@ checkpackages()
    aptitude install $missing
 
   else
-   printf "no valid entry detected...\n"
+   printf "$novalmsg"
   fi
 
  else
@@ -115,85 +134,117 @@ checkpackages()
  fi
 }
 
-dldda()
+clone_stuff()
  {
-# What version shall we download?
-  echo "please enter the desired CDDA-Version (Git Link, default is [ https://github.com/C0DEHERO/Cataclysm-DDA.git ]):"
-  read wanted_cdda
-  [ -z "$wanted_cdda" ] && echo -e "You entered nothing, we큞l use https://github.com/C0DEHERO/Cataclysm-DDA.git\n" || echo -e "You entered $wanted_cdda\n" 
-#  if [ "$wanted_cdda" == ""]; then
-#   wanted_cdda="https://github.com/C0DEHERO/Cataclysm-DDA.git"
-#  fi
+  clear
+  if [ "$tasksel" == "2" ]; then # selected cdda to clone
+   getlinkmsg="$getddalinkmsg"
+   defaultgit=$defaultddagit
+   gettargetmsg="$getddatargetmsg"
+   defaulttarget="$defaultddatarget"
 
-# getting the short version of the Git Repo
-  if [ "$(echo $wanted_cdda | wc -w)" == "1" ]; then
-   wanted_cdda_short=$(basename $wanted_cdda .git)
-  elif [ "$(echo $wanted_cdda | wc -w)" == "2" ]; then
-   wanted_cdda_branch=$(echo "$wanted_cdda" | awk '{ print $(NF) }')
-   wanted_cdda=$(echo "$wanted_cdda" | awk '{ print $(1) }')
-   wanted_cdda_short=$(basename $wanted_cdda .git)
+  elif [ "$tasksel" == "4" ]; then # selected dgamelaunch to clone
+   getlinkmsg="$getdgamelinkmsg"
+   defaultgit="$defaultdgamegit"
+   gettargetmsg="$getdgametargetmsg"
+   defaulttarget="$defaultdgametarget"
+
   else
-   printf "Invalid entry! Using the default..."
-   wanted_cdda="https://github.com/C0DEHERO/Cataclysm-DDA.git"
-   wanted_cdda_short=$(basename $wanted_cdda .git)
+   printf "$novalmsg"
+  fi
+
+# What version shall we download?
+#  echo "please enter the desired CDDA-Version (Git Link, default is [ https://github.com/C0DEHERO/Cataclysm-DDA.git ]):"
+
+  printf "$getlinkmsg"
+  read wanted
+  [ -z "$wanted" ] && echo -e "$novalmsg We will use $defaultgit\n" || echo -e "You entered $wanted\n" 
+# getting the short version of the Git Repo
+
+  if [ "$(echo $wanted | wc -w)" == "1" ]; then
+   wanted_short=$(basename $wanted .git)
+
+  elif [ "$(echo $wanted | wc -w)" == "2" ]; then
+   wanted_branch=$(echo "$wanted" | awk '{ print $(NF) }')
+   wanted=$(echo "$wanted" | awk '{ print $(1) }')
+   wanted_short=$(basename $wanted .git)
+
+  else
+   printf "$novalmsg Using the default..."
+   wanted="$defaultgit"
+   wanted_short=$(basename $wanted .git)
+  fi
+
+  if [ "$tasksel" == "2" ]; then # selected cdda to clone
+   wanted_cdda="$wanted_short"
+   target_cdda="$target"
+
+  elif [ "$tasksel" == "4" ]; then # selected dgamelaunch to clone
+   wanted_dgame="$wanted_short"
+   target_dgame="$target"
+
+  else
+   printf "$novalmsg"
   fi
 
 # Where shall we download it to?
-  echo "please enter full target path for the CDDA download, default is [ $HOME/CDDA/ ]:"
-  read target_cdda
-  [ -z "$target_cdda" ] && echo -e "You enterd nothing, we큞l use $HOME/CDDA\n" || echo -e "You entered $target_cdda\n"
-  if [$target_cdda == ""]; then
-   target_cdda="$HOME/CDDA"
+#  echo "please enter full target path for the CDDA download, default is [ $HOME/CDDA/ ]:"
+  printf "$gettargetmsg"
+  read target
+  [ -z "$target" ] && echo -e "$novalmsg We will use $defaulttarget\n" || echo -e "You entered $target\n"
+  if [$target == ""]; then
+   target="$defaulttarget"
   fi
 
 # now summarizing settings
   printf "\nChosen Settings:"
 
-  if [ -n "$wanted_cdda_branch" ]; then
-   printf "\nDownload Version:\t$wanted_cdda\nBranch: $wanted_cdda_branch"
+  if [ -n "$wanted_branch" ]; then
+   printf "\nDownload Version:\t$wanted\nBranch: $wanted_branch"
   else
-   printf "\nDownload Version:\t$wanted_cdda"
+   printf "\nDownload Version:\t$wanted"
   fi 
 
-  printf "\nTarget Directory:\t$target_cdda"
+  printf "\nTarget Directory:\t$target"
 
 # check if folder settings are valid
-# todo: check if entry is spelled correctly
+# todo: - check if entry is spelled correctly
+# 	- option to clear target folder
   echo -e "\nChecking for existing folder...\n"
-  if [ -d "$target_cdda" ]; then
-   echo -e "\n$target_cdda allready exists!\n"
+  if [ -d "$target" ]; then
+   echo -e "\n$target allready exists!\n"
    error="1"
   else 
-   echo -e "\n$target_cdda will be created!\n"
+   echo -e "\n$target will be created!\n"
   fi
 
 # ask user, if settings are ok
-  read -p "Press [Enter] key to start downloading, press [CTRL+C] to cancel."
+  read -p "$continue"
 
 # create target folder
-  if [ error == 1 ]; then
-   echo -e "\nAborting because $target_cdda allready exists..."
+  if [ "$error" == "1" ]; then
+   echo -e "\nAborting because $target allready exists..."
   else
-   echo -e "\nCreating $target_cdda\n"
-   mkdir -p "$target_cdda"
-   cd "$target_cdda"
-   echo -e "\n Now cloning $wanted_cdda into $target_cdda\n"
+   echo -e "\nCreating $target\n"
+   mkdir -p "$target"
+   cd "$target"
+   echo -e "\n Now cloning $wanted into $target\n"
 
-   if [ -n "$wanted_cdda_branch" ]; then
-    git clone $wanted_cdda_branch $wanted_cdda
+   if [ -n "$wanted_branch" ]; then
+    git clone -b $wanted_branch $wanted $target
    else
-    git clone $wanted_cdda
+    git clone $wanted $target
    fi 
   fi
  }
 
-criterr()
+crit_err()
  {
   criticalerror="1"
   printf "Exiting, Good Bye!\n\n"
  }
 
-compilestuff()
+compile_stuff()
  {
   cd $target_dir
   make
@@ -201,13 +252,20 @@ compilestuff()
 
 comp_cdda()
  {
-  if [ "$target_cdda" == "" ]; then
-   printf "$nocddadirgiven"
+  clear
+  if [ -n "$target_cdda" ]; then
+   printf "$nocddadirgiven\n Trying default: $defaultddatarget"
+   target_cdda="$defaultddatarget
+  elif [ -n "wanted_cdda" ]; then
+   printf "\nNo wanted CDDA given\n\n"
+   wanted_cdda=$
   else
-   target_dir="$target_cdda/$wanted_cdda_short"
+   printf "Will now compile $wanted_cdda in $target_cdda"
+   target_dir="$target_cdda"
    compilestuff
   fi
  }
+
 
 # MORE STUFF
 ########################################################
@@ -231,7 +289,7 @@ while [ "$criticalerror" == "0" ]
    do
     tasksel=$((tasksel +1))
     printf "($tasksel) - %b\n" $task 
-   done
+  done
   tasksel=1		# setting $tasksel to 1 to be the default task
   printf "\n"
   printf "Please make your selection by entering the coresponding number, default is [1]: "
@@ -243,62 +301,12 @@ while [ "$criticalerror" == "0" ]
 
 #switch case for task selection
   case $tasksel in
-   1) checkpackages;;
-   2) dldda;;
+   1) check_packages;;
+   2) clone_stuff;;
    3) comp_cdda;;
-   8) criterr;;
-   *) printf "\n$generrormsg No valid Entry, please try again\n";;
+   4) clone_stuff;;
+   8) crit_err;;
+   *) printf "\n$generrormsg $novalmsg No valid Entry, please try again\n";;
   esac 
 
-# What version shall we download?
-#   echo "please enter the desired CDDA-Version (Git Link, default is [ https://github.com/C0DEHERO/Cataclysm-DDA.git ]):"
-#   read wanted_cdda
-#   [ -z "$wanted_cdda" ] && echo -e "You entered nothing, we큞l use https://github.com/C0DEHERO/Cataclysm-DDA.git\n" || echo -e "You entered $wanted_cdda\n" 
-#   if [$wanted_cdda == ""]; then
-#    wanted_cdda="https://github.com/C0DEHERO/Cataclysm-DDA.git"
-#   fi
-#
-# getting the short version of the Git Repo
-#   wanted_cdda_branch=$(echo $wanted_cdda | xargs -1)
-#wanted_cdda_short=$(basename $wanted_cdda .git)
-
-# Where shall we download it to?
-#   echo "please enter full target path for the CDDA download, default is [ $HOME/CDDA/ ]:"
-#   read target_cdda
-#   [ -z "$target_cdda" ] && echo -e "You enterd nothing, we큞l use $HOME/CDDA\n" || echo -e "You entered $target_cdda\n"
-#   if [$target_cdda == ""]; then
-#    target_cdda="$HOME/CDDA"
-#   fi
-
-# now summarizing settings
-#   echo -e "\nChosen Settings:"
-#   echo -e "\nDownload Version:\t$wanted_cdda"
-#   echo -e "Target Directory:\t$target_cdda"
-
-# check if folder settings are valid
-# todo: check if entry is spelled correctly
-#   echo -e "\nChecking for existing folder...\n"
-#   if [ -d "$target_cdda" ]; then
-#    echo -e "\n$target_cdda allready exists!\n"
-#    error="1"
-#   else 
-#    echo -e "\n$target_cdda will be created!\n"
-#   fi
-#
-# ask user, if settings are ok
-#   read -p "Press [Enter] key to start downloading, press [CTRL+C] to cancel."
-
-# create target folder
-#   if [ error == 1 ]; then
-#    echo -e "\nAborting because $target_cdda allready exists..."
-#   else
-#    echo -e "\nCreating $target_cdda\n"
-#    mkdir -p "$target_cdda"
-#    cd "$target_cdda"
-#    echo -e "\n Now cloning $wanted_cdda into $target_cdda\n"
-#    git clone $wanted_cdda
-#    cd $wanted_cdda_short 
-#    read -p "Press [Enter] key to start compiling, press [CTRL+C] to cancel."
-#    make
-#   fi
- done
+done

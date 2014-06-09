@@ -60,7 +60,7 @@ version="v.0.0.4"
 error="0"
 criticalerror="0"
 packages="libncurses5-dev git-core g++ make autogen autoconf libncurses5 libncursesw5 libncursesw5-dev libncursesw5-dev bison flex sqlite3 libsqlite3-dev"
-lxc_packages="debootstrap lxc libvirt-bin dnsmasq-base screen"
+lxc_packages="sed debootstrap lxc libvirt-bin dnsmasq-base screen"
 checkdeptask="Check Dependencies"
 tasks="Setuo_LXC Check_dependencies Download_Cataclysm-DDA Compile_Cataclysm-DDA Download_dgamelaunch Compile_dgamelaunch set-up_game Everything QUIT" 
 lxc_tasks="Check_LXC_Dependencies Setup_LXC_CGroup Generate_and_modify_LXC_configs Setup_LXC_Container QUIT"
@@ -128,7 +128,7 @@ done
 check_lxc_packages() 
 {
  clear
- printf "$selected $lxc_tasksel"
+ printf "$selected $tasksel\n"
  printf "Now checking for dependencies...\n"
  read -p "$continue"
 
@@ -179,50 +179,79 @@ lxc_cgroup()
  clear
  fstab="/etc/fstab"
  fstab_backup="/etc/fstab.backup.lxc_cgroup"
- printf "backing up $fstab to $fstab_backup!\n\n"  
 
-#Check if fstab-backupfile is allready present
- target="$fstab_backup"
- check_target_file
+ printf "$selected $tasksel\n"
 
- cp $fstab $fstab_backup
- if [ $? -ne 0 ]; then
-  printf "$generrormsg"
-  return 1
- fi
+ if [ "$(cat $fstab | grep cgroup)" == "" ]; then
+  target="$fstab_backup"
+  check_target_file
+  printf "backing up $fstab to $fstab_backup!\n\n"  
+  cp $fstab $fstab_backup
 
-#TODO:
-#check if line is allready pressent...
+  if [ $? -ne 0 ]; then
+   printf "$generrormsg: Failed to copy $fstab to $fstab_backup"
+   return 1
+  fi
 
- printf "adding cgroup line to $fstab...\n\n"
+  printf "adding cgroup line to $fstab...\n\n"
 cat << EOF >> /etc/fstab
 cgroup  /sys/fs/cgroup  cgroup  defaults  0   0
 EOF
 
- printf "trying to mount /sys/fs/cgroup...\n\n"
- mount /sys/fs/cgroup 
- if [ $? -ne 0 ]; then
-  printf "$generrormsg: Mounting failed!\n\n"
-  return 1
- fi
+  printf "trying to mount /sys/fs/cgroup...\n\n"
+  mount /sys/fs/cgroup 
 
+  if [ $? -ne 0 ]; then
+   printf "$generrormsg: Mounting failed!\n\n"
+   return 1
+  fi
+
+ else
+  printf "Skipping modification to $fstab:\nThere seemes to be a cgroup mountpoint allready!\n\n"
+
+ fi
 }
 
 lxc_mod_configs()
 {
  clear
- printf "replacing lenny with squeeze in debian lxc-template and changing server to http://ftp5.gwdg.de/pub/linux/debian/debian"
-sed 113s/.*/squeeze $cache/partial-$arch http://ftp5.gwdg.de/pub/linux/debian/debian /usr/lib64/lxc/templates/lxc-debian
- if [ $? -ne 0 ]; then
-  printf "$generrormsg"
-  return 1
+ lxc_template="/usr/lib64/lxc/templates/lxc-debian"
+ lxc_temp="/tmp/lxc-debian"
+ gwdg="http://ftp5.gwdg.de/pub/linux/debian/debian"
+
+ printf "$selected $tasksel\n"
+ printf "Creating $lcx_template.backup and workcopy in $lxc_temp to replace 'lenny' with 'squeeze' and changing server to $gwdg in $lxc_template... "
+
+ if [ -f "$lxc_template" ]; then
+  printf "\n$generrormsg: $lxc_template seems to be missing!\n"
+
+ else
+  cp $lxc_template $lxc_template.backup
+  sed "113s/.*/squeeze \$cache\/partial-\$arch http:\/\/ftp5.gwdg.de\/pub\/linux\/debian\/debian/g" $lxc_template > $lxc_temp
+  if [ $? -ne 0 ]; then
+   printf "$generrormsg: Unable to modify Line 113 in File $lxc_template\n"
+   return 1
+  else
+   printf "Done!\n\n"
+  fi
  fi
 
- printf "removing dhcp-client from package-list of container"
- sed 93d /usr/lib64/lxc/templates/lxc-debian
- if [ $? -ne 0 ]; then
-  printf "$generrormsg"
-  return 1
+ printf "Removing dhcp-client from package-list of container..."
+
+ if [ "$(sed '93!d' $lxc_temp | grep dhcp)" == "" ]; then
+  printf "\nNo DHCP-Client entry in File $lxc_temp, line 93 found. Skipping...\n"
+
+ else 
+  sed -i.back -e '93d' $lxc_temp
+
+  if [ $? -ne 0 ]; then
+   printf "$generrormsg: Unable to delete line 93 in $lxc_temp...\n"
+   return 1
+
+  else
+  cp $lxc_temp $lxc_template
+  fi
+
  fi
 
  printf "creating lxc-container network config dir"

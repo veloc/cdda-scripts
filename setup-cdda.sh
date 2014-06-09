@@ -59,9 +59,11 @@
 version="v.0.0.4"
 error="0"
 criticalerror="0"
-packages="libncurses5-dev git-core g++ make autogen autoconf libncurses5 libncursesw5 libncursesw5-dev libncursesw5-dev bison flex sqlite3 libsqlite3-dev debootstrap lxc libvirt-bin dnsmasq-base screen"
+packages="libncurses5-dev git-core g++ make autogen autoconf libncurses5 libncursesw5 libncursesw5-dev libncursesw5-dev bison flex sqlite3 libsqlite3-dev"
+lxc_packages="debootstrap lxc libvirt-bin dnsmasq-base screen"
 checkdeptask="Check Dependencies"
-tasks="Check_dependencies Download_Cataclysm-DDA Compile_Cataclysm-DDA Download_dgamelaunch Compile_dgamelaunch set-up_game Everything QUIT" 
+tasks="Setuo_LXC Check_dependencies Download_Cataclysm-DDA Compile_Cataclysm-DDA Download_dgamelaunch Compile_dgamelaunch set-up_game Everything QUIT" 
+lxc_tasks="Check_LXC_Dependencies Setup_LXC_CGroup Generate_and_modify_LXC_configs Setup_LXC_Container QUIT"
 
 #setting default values
 defaultddagit="https://github.com/C0DEHERO/Cataclysm-DDA.git"
@@ -90,91 +92,205 @@ novalmsg="No valid Entry!"
 
 # FUNCTIONS
 ########################################################
-#lxc_cgroup()
-#{
-# clear
-# printf "backing up /etc/fstab to /etc/fstab.backup!"  
-# cp /etc/fstab /etc/fstab.backup
-# if [ $? -ne 0 ]; then
-#  printf "$generrormsg"
-#  return 1
-# fi
-#
-# printf "adding cgroup line to /etc/fstab"
-# cat << EOF >> /etc/fstab
-# cgroup  /sys/fs/cgroup  cgroup  defaults  0   0
-# EOF
-#
-# printf "trying to mount /sys/fs/cgroup..."
-# mount /sys/fs/cgroup 
-# if [ $? -ne 0 ]; then
-#  printf "$generrormsg"
-#  return 1
-# fi
-#
-#}
-#
-#lxc_mod_configs()
-#{
-# clear
-# printf "replacing lenny with squeeze in debian lxc-template and changing server to http://ftp5.gwdg.de/pub/linux/debian/debian"
-#sed 113s/.*/squeeze $cache/partial-$arch http://ftp5.gwdg.de/pub/linux/debian/debian" /usr/lib64/lxc/templates/lxc-debian
-# if [ $? -ne 0 ]; then
-#  printf "$generrormsg"
-#  return 1
-# fi
-#
-# printf "removing dhcp-client from package-list of container"
-# sed 93d /usr/lib64/lxc/templates/lxc-debian
-# if [ $? -ne 0 ]; then
-#  printf "$generrormsg"
-#  return 1
-# fi
-#
-# printf "creating lxc-container network config dir"
-# mkdir -p /lxc/cataclysm/
-# if [ $? -ne 0 ]; then
-#  printf "$generrormsg"
-#  return 1
-# fi
-#
-# printf "creating lxc-container network config file"
-# cat << EOF > /lxc/cataclysm/config
-# lxc.network.type = veth
-# lxc.network.flags = up
-# lxc.network.link = lxcbr0
-# lxc.network.hwaddr = 00:FF:AA:00:00:01
-# lxc.network.ipv4 = 192.168.123.2/24
-# EOF
-#
-# printf "creating host-network bridge config to allow connection to the container"
-# cat << EOF > /var/lib/libvirt/network/lxc.xml
-# <network>
-#  <name>lxc</name>
-#  <uuid>e58bbb2b-4b27-807a-68c4-e182dcf47258</uuid>
-#  <forward mode='nat'/>
-#  <bridge name='lxcbr0' stp='off' delay='0' />
-#  <ip address='192.168.123.1' netmask='255.255.255.0'>
-#    <dhcp>
-#      <range start='192.168.123.100' end='192.168.123.254' />
-#    </dhcp>
-#  </ip>
-# </network>
-# EOF
-#}
-#
-#setup_lxc_container()
-#{
-# printf "setting up bridge and marking it for autostart"
-# virsh -c lxc:/// net-define /etc/libvirt/qemu/networks/lxc.xml
-# virsh -c lxc:/// net-startn lxc
-# virsh -c lxc:/// net-autostart lxc
-#
-# printf "creating container, this may take some time"
-# lxc-create -n cataclysm -t debbian -f /lxc/cataclysm/config
-#}
-#
-#
+lxc_menu()
+{
+while [ "$criticalerror" == "0" ]
+ do
+
+# generating task list
+  lxc_tasksel=0             # setting $tasksel to 0 to be able to count the tasks
+  for lxc_task in $lxc_tasks	# this is for setting a task "do all"
+   do
+    lxc_tasksel=$((lxc_tasksel +1))
+    printf "($lxc_tasksel) - %b\n" $lxc_task
+  done
+  lxc_tasksel=1             # setting $tasksel to 1 to be the default task
+  printf "\n"
+  printf "Please make your selection by entering the coresponding number, default is [1]: "
+  read lxc_tasksel
+
+  if [ "$lxc_tasksel" == "" ]; then
+   lxc_tasksel="1"
+  fi
+ 
+#switch case for lxc task selection
+  case "$lxc_tasksel" in
+   1) check_lxc_packages;;
+   2) lxc_cgroup;;
+   3) lxc_mod_configs;;
+   4) setup_lxc_container;;
+   9) crit_err;;
+   *) printf "\n$generrormsg $novalmsg No valid Entry, please try again\n";;
+  esac 
+done
+}
+
+check_lxc_packages() 
+{
+ clear
+ printf "$selected $lxc_tasksel"
+ printf "Now checking for dependencies...\n"
+ read -p "$continue"
+
+# checking for required packages:
+ deperror="0"
+ lxc_missing=""
+ printf "Checking Dependencies:\n"
+ for lxc_package in $lxc_packages
+  do
+   check=$(cat /var/lib/dpkg/status | grep Package | grep $lxc_package)
+   if [ "" == "$check" ]; then
+    lxc_missing+="$lxc_package "
+    printf "%-20s%b\n" $lxc_package $depmissingmsg
+    deperror="1"
+   else
+    printf "%-20s%b\n" $lxc_package $depokmsg
+   fi
+ done  
+
+# Print a list of the missing packages
+ printf "\nMissing Packages:\n$lxc_missing\n\n"
+
+ if [ "$deperror" == "1" ]; then
+  installdeps=""
+  printf  "Shall we install the missing dependencies? (y)es or (n)o:\n"
+  read installdeps
+
+  if [ "$installdeps" == "n" ]; then
+   criticalerror="1"
+   printf "$deperrormsg"
+
+  elif [ "$installdeps" == "y" ]; then
+   printf "installing dependencies:\n$lxc_missing\n"
+   read -p "$continue"
+   aptitude install $lxc_missing
+
+  else
+   printf "$novalmsg"
+  fi
+
+ else
+ read -p "Deperror says $deperror, $continue"
+ fi
+}
+
+lxc_cgroup()
+{
+ clear
+ fstab="/etc/fstab"
+ fstab_backup="/etc/fstab.backup.lxc_cgroup"
+ printf "backing up $fstab to $fstab_backup!\n\n"  
+
+#Check if fstab-backupfile is allready present
+ target="$fstab_backup"
+ check_target_file
+
+ cp $fstab $fstab_backup
+ if [ $? -ne 0 ]; then
+  printf "$generrormsg"
+  return 1
+ fi
+
+#TODO:
+#check if line is allready pressent...
+
+ printf "adding cgroup line to $fstab...\n\n"
+cat << EOF >> /etc/fstab
+cgroup  /sys/fs/cgroup  cgroup  defaults  0   0
+EOF
+
+ printf "trying to mount /sys/fs/cgroup...\n\n"
+ mount /sys/fs/cgroup 
+ if [ $? -ne 0 ]; then
+  printf "$generrormsg: Mounting failed!\n\n"
+  return 1
+ fi
+
+}
+
+lxc_mod_configs()
+{
+ clear
+ printf "replacing lenny with squeeze in debian lxc-template and changing server to http://ftp5.gwdg.de/pub/linux/debian/debian"
+sed 113s/.*/squeeze $cache/partial-$arch http://ftp5.gwdg.de/pub/linux/debian/debian /usr/lib64/lxc/templates/lxc-debian
+ if [ $? -ne 0 ]; then
+  printf "$generrormsg"
+  return 1
+ fi
+
+ printf "removing dhcp-client from package-list of container"
+ sed 93d /usr/lib64/lxc/templates/lxc-debian
+ if [ $? -ne 0 ]; then
+  printf "$generrormsg"
+  return 1
+ fi
+
+ printf "creating lxc-container network config dir"
+ mkdir -p /lxc/cataclysm/
+ if [ $? -ne 0 ]; then
+  printf "$generrormsg"
+  return 1
+ fi
+
+ printf "creating lxc-container network config file"
+cat << EOF > /lxc/cataclysm/config
+lxc.network.type = veth
+lxc.network.flags = up
+lxc.network.link = lxcbr0
+lxc.network.hwaddr = 00:FF:AA:00:00:01
+lxc.network.ipv4 = 192.168.123.2/24
+EOF
+
+ printf "creating host-network bridge config to allow connection to the container"
+cat << EOF > /var/lib/libvirt/network/lxc.xml
+<network>
+ <name>lxc</name>
+ <uuid>e58bbb2b-4b27-807a-68c4-e182dcf47258</uuid>
+ <forward mode='nat'/>
+ <bridge name='lxcbr0' stp='off' delay='0' />
+ <ip address='192.168.123.1' netmask='255.255.255.0'>
+   <dhcp>
+    <range start='192.168.123.100' end='192.168.123.254' />
+   </dhcp>
+  </ip>
+</network>
+EOF
+}
+
+setup_lxc_container()
+{
+ printf "setting up bridge and marking it for autostart"
+ virsh -c lxc:/// net-define /etc/libvirt/qemu/networks/lxc.xml
+ virsh -c lxc:/// net-startn lxc
+ virsh -c lxc:/// net-autostart lxc
+
+ printf "creating container, this may take some time"
+ lxc-create -n cataclysm -t debbian -f /lxc/cataclysm/config
+}
+
+check_target_file()
+{
+ echo -e "\nChecking for existing file...\n"
+ if [ -f "$target" ]; then
+  echo -e "\n$target allready exists!\n"
+  error="1"
+  read -p "$continue"
+ else
+  echo -e "\n$target will be created!\n"
+ fi
+}
+
+check_target_dir()
+{
+ echo -e "\nChecking for existing folder...\n"
+ if [ -d "$target" ]; then
+  echo -e "\n$target allready exists!\n"
+  error="1"
+  read -p "$continue"
+ else
+  echo -e "\n$target will be created!\n"
+ fi
+}
 
 check_packages() 
 {
@@ -301,12 +417,13 @@ clone_stuff()
 # todo: - check if entry is spelled correctly
 # 	- option to clear target folder
   echo -e "\nChecking for existing folder...\n"
-  if [ -d "$target" ]; then
-   echo -e "\n$target allready exists!\n"
-   error="1"
-  else 
-   echo -e "\n$target will be created!\n"
-  fi
+#  if [ -d "$target" ]; then
+#   echo -e "\n$target allready exists!\n"
+#   error="1"
+#  else 
+#   echo -e "\n$target will be created!\n"
+#  fi
+ check_target_dir
 
 # ask user, if settings are ok
   read -p "$continue"
@@ -396,11 +513,12 @@ while [ "$criticalerror" == "0" ]
 
 #switch case for task selection
   case "$tasksel" in
-   1) check_packages;;
-   2) clone_stuff;;
-   3) comp_cdda;;
-   4) clone_stuff;;
-   8) crit_err;;
+   1) lxc_menu;;
+   2) check_packages;;
+   3) clone_stuff;;
+   4) comp_cdda;;
+   5) clone_stuff;;
+   9) crit_err;;
    *) printf "\n$generrormsg $novalmsg No valid Entry, please try again\n";;
   esac 
 

@@ -51,13 +51,13 @@
 version="v.0.0.5"
 error="0"
 criticalerror="0"
-packages="libncurses5-dev git-core g++ make autogen autoconf libncurses5 libncursesw5 libncursesw5-dev libncursesw5-dev bison flex sqlite3 libsqlite3-dev"
+dda_packages="libncurses5-dev git-core g++ make autogen autoconf libncurses5 libncursesw5 libncursesw5-dev libncursesw5-dev bison flex sqlite3 libsqlite3-dev"
 lxc_packages="sed debootstrap lxc libvirt-bin dnsmasq-base screen"
 checkdeptask="Check Dependencies"
 
-main_menu_list="LXC_Menu DDA_Menu Everything(NOT_WORKING!) QUIT"
-dda_tasks="Chroot_to_LXC-Container Check_dependencies Download_Cataclysm-DDA Compile_Cataclysm-DDA Download_dgamelaunch Compile_dgamelaunch set-up_game Everything Main_Menu QUIT"
-lxc_tasks="Check_LXC_Dependencies Setup_LXC_CGroup Generate_and_modify_LXC_configs Setup_LXC_Container Main_Menu QUIT"
+main_menu_list="LXC Menu;DDA Menu;Everything (NOT WORKING!);QUIT"
+dda_tasks="Chroot to LXC-Container;Check DDA Dependencies;Clone Cataclysm-DDA Git;Compile Cataclysm-DDA;Clone dgamelaunch Git;Compile dgamelaunch (NOT WORKING);set-up the game! (NOT WORKING);Everything (NOT WORKING);Main Menu;QUIT"
+lxc_tasks="Check LXC Dependencies;Setup LXC CGroup;Generate and modify LXC configs;Setup LXC Container;Main Menu;QUIT"
 
 bridge_config_file="/etc/libvirt/qemu/networks/lxc.xml"
 
@@ -65,12 +65,14 @@ bridge_config_file="/etc/libvirt/qemu/networks/lxc.xml"
 defaultddagit="https://github.com/C0DEHERO/Cataclysm-DDA.git"
 defaultdgamegit="https://github.com/C0DEHERO/dgamelaunch.git"
 defaultddatarget="/var/lib/lxc/cataclysm/rootfs/opt/CDDA/"
-defaultdgametarget="/var/lib/lxc/cataclysm/rootfs/opt/DDA/dgamelaunch/"
+defaultdgametarget="/var/lib/lxc/cataclysm/rootfs/opt/CDDA/dgamelaunch/"
+chroot="/var/lib/lxc/cataclysm/rootfs"
 
 # strings
 depmissingmsg="\e[31mMissing!\e[37m"
 depokmsg="\e[32mInstalled!\e[37m"
-welcomemsg="This script will (sometime in the future) download, [merge?,] compile and setup a chroot enviroment for Cataclysm-DDA with _shared Worlds_\n\nCurrent Version:\t$version\n\n"
+done="\e[32mDone!\e[37m"
+welcomemsg="This script will (sometime in the future) download, [merge?,] compile and setup a secure chroot enviroment for Cataclysm-DDA with _shared Worlds_\n\nCurrent Version:\t$version\n\n"
 continue="Press [Enter] key to continue, press [CTRL+C] to cancel."
 
 getlinkmsgstr="Will now clone"
@@ -82,25 +84,27 @@ selected="You have selected "
 # Error MSGs
 generrormsg="\e[31mError\e[37m:"
 nocddadirgiven="\e[31mError\e[37m: No CDDA Dir given. Please run Step (2) first!\n\n"
-deperrormsg="$generrormsg Dependencies missing!\nPlease run the following command to install the missing dependencies and try again:\n\n\taptitude install $missing\n\n"
+deperrormsg="$generrormsg Dependencies missing!\nPlease run the following command to install the missing dependencies and try again:\n\n\taptitude install"
 novalmsg="No valid Entry!"
 
 # FUNCTIONS
 ########################################################
 # MENUS
 ########################################################
-
-main_menu()
+task_list()
 {
+
+ old_IFS="$IFS"
+ IFS=";"
 # generating task list
   printf "\n"
-  tasksel=0		# setting $tasksel to 0 to be able to count the tasks 
-  for task in $main_menu_list
+  tasksel=0             # setting $tasksel to 0 to be able to count the tasks
+  for task in $menu
    do
     tasksel=$((tasksel +1))
-    printf "($tasksel) - %b\n" $task 
+    printf "($tasksel) - %b\n" $task
   done
-  tasksel=1		# setting $tasksel to 1 to be the default task
+  tasksel=1             # setting $tasksel to 1 to be the default task
   printf "\n"
   printf "Please make your selection by entering the coresponding number, default is [1]: "
   read tasksel
@@ -108,6 +112,13 @@ main_menu()
   if [ "$tasksel" == "" ]; then
    tasksel="1"
   fi
+ IFS="$old_IFS"
+}
+
+main_menu()
+{
+ menu="$main_menu_list"
+ task_list
 
 #switch case for task selection
   case "$tasksel" in
@@ -121,22 +132,8 @@ main_menu()
 
 dda_menu()
 {
- printf "\n"
-# generating task list
-  tasksel=0		# setting $tasksel to 0 to be able to count the tasks 
-  for task in $dda_tasks
-   do
-    tasksel=$((tasksel +1))
-    printf "($tasksel) - %b\n" $task 
-  done
-  tasksel=1		# setting $tasksel to 1 to be the default task
-  printf "\n"
-  printf "Please make your selection by entering the coresponding number, default is [1]: "
-  read tasksel
-
-  if [ "$tasksel" == "" ]; then
-   tasksel="1"
-  fi
+ menu="$dda_tasks"
+ task_list
 
 #switch case for task selection
   case "$tasksel" in
@@ -156,27 +153,11 @@ dda_menu()
 
 lxc_menu()
 {
-while [ "$criticalerror" == "0" ]
- do
-  printf "\n"
-# generating task list
-  lxc_tasksel=0             # setting $tasksel to 0 to be able to count the tasks
-  for lxc_task in $lxc_tasks	# this is for setting a task "do all"
-   do
-    lxc_tasksel=$((lxc_tasksel +1))
-    printf "($lxc_tasksel) - %b\n" $lxc_task
-  done
-  lxc_tasksel=1             # setting $tasksel to 1 to be the default task
-  printf "\n"
-  printf "Please make your selection by entering the coresponding number, default is [1]: "
-  read lxc_tasksel
+ menu="$lxc_tasks"
+ task_list 
 
-  if [ "$lxc_tasksel" == "" ]; then
-   lxc_tasksel="1"
-  fi
- 
 #switch case for lxc task selection
-  case "$lxc_tasksel" in
+  case "$tasksel" in
    1) check_lxc_packages;;
    2) lxc_cgroup;;
    3) lxc_mod_configs;;
@@ -185,7 +166,6 @@ while [ "$criticalerror" == "0" ]
    9) crit_err;;
    *) printf "\n$generrormsg $novalmsg No valid Entry, please try again\n";;
   esac 
-done
 }
 
 ###############################################
@@ -199,46 +179,8 @@ check_lxc_packages()
  printf "Now checking for dependencies...\n"
  read -p "$continue"
 
-# checking for required packages:
- deperror="0"
- lxc_missing=""
- printf "Checking Dependencies:\n"
- for lxc_package in $lxc_packages
-  do
-   check=$(cat /var/lib/dpkg/status | grep Package | grep $lxc_package)
-   if [ "" == "$check" ]; then
-    lxc_missing+="$lxc_package "
-    printf "%-20s%b\n" $lxc_package $depmissingmsg
-    deperror="1"
-   else
-    printf "%-20s%b\n" $lxc_package $depokmsg
-   fi
- done  
-
-# Print a list of the missing packages
- printf "\nMissing Packages:\n$lxc_missing\n\n"
-
- if [ "$deperror" == "1" ]; then
-  installdeps=""
-  printf  "Shall we install the missing dependencies? (y)es or (n)o:\n"
-  read installdeps
-
-  if [ "$installdeps" == "n" ]; then
-   criticalerror="1"
-   printf "$deperrormsg"
-
-  elif [ "$installdeps" == "y" ]; then
-   printf "installing dependencies:\n$lxc_missing\n"
-   read -p "$continue"
-   aptitude install $lxc_missing
-
-  else
-   printf "$novalmsg"
-  fi
-
- else
- read -p "Deperror says $deperror, $continue"
- fi
+ packages="$lxc_packages"
+ check_packages
 }
 
 lxc_cgroup()
@@ -256,7 +198,7 @@ lxc_cgroup()
   cp $fstab $fstab_backup
 
   if [ $? -ne 0 ]; then
-   printf "$generrormsg: Failed to copy $fstab to $fstab_backup"
+   printf "$generrormsg\n\tFailed to copy $fstab to $fstab_backup\n\n"
    return 1
   fi
 
@@ -269,71 +211,68 @@ EOF
   mount /sys/fs/cgroup 
 
   if [ $? -ne 0 ]; then
-   printf "$generrormsg: Mounting failed!\n\n"
+   printf "$generrormsg\n\tMounting failed!\n\n"
    return 1
   fi
 
  else
-  printf "Skipping modification to $fstab:\nThere seemes to be a cgroup mountpoint allready!\n"
+  printf "Skipping modification to $fstab:\n\tThere seemes to be a cgroup mountpoint allready!\n"
 
  fi 
  read -p "$continue"
 }
 
-lxc_mod_configs()
+lxc_mod_template()
 {
- clear
- lxc_template="/usr/lib64/lxc/templates/lxc-debian"
- lxc_temp="/tmp/lxc-debian"
- gwdg="http://ftp5.gwdg.de/pub/linux/debian/debian"
-
- printf "$selected to modify the debian template generation file and create a config file for the network of the container\n\n"
  printf "Modifying $lxc_template... "
 
  if [ -f "$lxc_template" ]; then
   cp $lxc_template $lxc_template.backup
   sed "113s/.*/squeeze \$cache\/partial-\$arch http:\/\/ftp5.gwdg.de\/pub\/linux\/debian\/debian/g" $lxc_template > $lxc_temp
   if [ $? -ne 0 ]; then
-   printf "$generrormsg: Unable to modify Line 113 in File $lxc_template\n"
+   printf "$generrormsg\n\tUnable to modify Line 113 in File $lxc_template\n\n"
    return 1
   else
-   printf "Done!\n\n"
+   printf "$done\n\n"
    printf "Removing dhcp-client from package-list of container..."
 
    if [ "$(sed '93!d' $lxc_temp | grep dhcp)" == "" ]; then
-    printf "\nNo DHCP-Client entry in File $lxc_temp, line 93 found. Skipping...\n"
+    printf "\nNo DHCP-Client entry in File $lxc_temp, line 93 found. \e[33mSkipping\e[37m...\n\n"
 
-   else 
+   else
     sed -i.back -e '93d' $lxc_temp
 
     if [ $? -ne 0 ]; then
-     printf "$generrormsg: Unable to delete line 93 in $lxc_temp...\n"
+     printf "$generrormsg\n\tUnable to delete line 93 in $lxc_temp...\n\n"
      return 1
 
     else
      cp $lxc_temp $lxc_template
-     printf "Done!\n"
+     printf "$done\n"
     fi
 
    fi
   fi
  else
-  printf "\n$generrormsg: $lxc_template seems to be missing!\n"
+  printf "$generrormsg\n\t$lxc_template seems to be missing!\n\n"
  fi
+}
 
+lxc_create_network_config()
+{
  printf "Creating lxc-container network config dir... "
  mkdir -p /lxc/cataclysm/
  if [ $? -ne 0 ]; then
-  printf "\n$generrormsg: Unable to create /lxc/cataclysm/\n"
+  printf "$generrormsg\n\tUnable to create /lxc/cataclysm/\n\n"
   return 1
  else
-  printf "Done!\n"
+  printf "$done\n"
  fi
 
  printf "Creating lxc-container network config file... "
  cat_config="/lxc/cataclysm/config"
  if [ -f "$cat_config" ]; then
-  printf "\n$generrormsg: $cat_config allready exists!\n"
+  printf "$generrormsg\n\t$cat_config allready exists!\n\n"
 
  else
   cat << EOF > /lxc/cataclysm/config
@@ -343,12 +282,15 @@ lxc.network.link = lxcbr0
 lxc.network.hwaddr = 00:FF:AA:00:00:01
 lxc.network.ipv4 = 192.168.123.2/24
 EOF
-  printf "Done!\n"
+  printf "$done\n"
  fi
+}
 
+lxc_create_network_bridge()
+{
  printf "Creating network bridge config for the host... "
  if [ -f "$bridge_config_file" ]; then
-  printf "\ngenerrormsg: $bridgeconfigfile allready exists!\n"
+  printf "$generrormsg\n\t$bridge_config_file allready exists!\n\n"
  else
   cat << EOF > $bridge_config_file
 <network>
@@ -363,8 +305,23 @@ EOF
   </ip>
 </network>
 EOF
-  printf "Done!\n"
+  printf "$done\n"
  fi
+}
+
+lxc_mod_configs()
+{
+ clear
+ lxc_template="/usr/lib64/lxc/templates/lxc-debian"
+ lxc_temp="/tmp/lxc-debian"
+ server="http://ftp5.gwdg.de/pub/linux/debian/debian"
+
+ printf "$selected to modify the debian template generation file and create a config file for the network of the container\n\n"
+
+ lxc_mod_template
+ lxc_create_network_config
+ lxc_create_network_bridge
+
  read -p "$continue"
 }
 
@@ -374,6 +331,8 @@ setup_lxc_container()
  printf "$selected to setup the LXC Container.\n"
  printf "This step will take some time!\n"
  read -p "$continue\n"
+
+#TODO: check if container allready exists!
 
  printf "Setting up bridge and marking it for autostart...\n"
  virsh -c lxc:/// net-define $bridge_config_file
@@ -388,6 +347,53 @@ setup_lxc_container()
 ####################################################
 # GENERAL
 ####################################################
+print_missing_packages()
+{
+ printf "\nMissing Packages:\n$missing\n\n"
+
+ if [ "$deperror" == "1" ]; then
+  installdeps=""
+  printf  "Shall we install the missing dependencies? (y)es or (n)o:\n"
+  read installdeps
+
+  if [ "$installdeps" == "n" ]; then
+   criticalerror="1"
+   printf "$deperrormsg $missing\n\n"
+
+  elif [ "$installdeps" == "y" ]; then
+   printf "installing dependencies:\n$missing\n"
+   read -p "$continue"
+   aptitude install $missing
+
+  else
+   printf "$novalmsg"
+  fi
+
+ else
+ read -p "Deperror says $deperror, $continue"
+ fi
+}
+
+check_packages()
+{
+# checking for required packages:
+ deperror="0"
+ missing=""
+ printf "Checking Dependencies:\n"
+ for package in $packages
+  do
+   check=$(cat /var/lib/dpkg/status | grep Package | grep $package)
+   if [ "" == "$check" ]; then
+    missing+="$package "
+    printf "%-20s%b\n" $package $depmissingmsg
+    deperror="1"
+   else
+    printf "%-20s%b\n" $package $depokmsg
+   fi
+ done
+
+ print_missing_packages
+}
 
 check_target_file()
 {
@@ -419,7 +425,8 @@ check_target_dir()
 
 chroot_to_lxc()
 {
- chroot /var/lib/lxc/cataclysm/rootfs
+chroot $chroot
+# chroot /var/lib/lxc/cataclysm/rootfs
 }
 
 check_dda_packages() 
@@ -428,46 +435,10 @@ check_dda_packages()
  printf "$selected to check for rhe dependencies to _compile_ CDDA.\n"
  printf "Now checking for dependencies...\n"
  read -p "$continue"
+ 
+ packages="$dda_packages"
 
-# checking for required packages:
- deperror="0"
- missing=""
- printf "Checking Dependencies:\n"
- for dda_package in $dda_packages
-  do
-   check=$(cat /var/lib/dpkg/status | grep Package | grep $dda_package)
-   if [ "" == "$check" ]; then
-    dda_missing+="$dda_package "
-    printf "%-20s%b\n" $dda_package $depmissingmsg
-    deperror="1"
-   else
-    printf "%-20s%b\n" $dda_package $depokmsg
-   fi
- done  
-
-# Print a list of the missing packages
- printf "\nMissing Packages:\n$dda_missing\n\n"
-
- if [ "$deperror" == "1" ]; then
-  printf  "Shall we install the missing dependencies? (y)es or (n)o:\n"
-  read installdeps
-
-  if [ "$installdeps" == "n" ]; then
-   criticalerror="1"
-   printf "$deperrormsg"
-
-  elif [ "$installdeps" == "y" ]; then
-   printf "installing dependencies:\n$dda_missing\n"
-   read -p "$continue"
-   aptitude install $dda_missing
-
-  else
-   printf "$novalmsg"
-  fi
-
- else
- read -p "Deperror says $deperror, $continue"
- fi
+ check_packages
 }
 
 clone_dda()
@@ -575,31 +546,4 @@ fi
 while [ "$criticalerror" == "0" ]
  do
   main_menu
-# generating task list
-#  tasksel=0		# setting $tasksel to 0 to be able to count the tasks 
-#  for task in $tasks
-#   do
-#    tasksel=$((tasksel +1))
-#    printf "($tasksel) - %b\n" $task 
-#  done
-#  tasksel=1		# setting $tasksel to 1 to be the default task
-#  printf "\n"
-#  printf "Please make your selection by entering the coresponding number, default is [1]: "
-#  read tasksel
-#
-#  if [ "$tasksel" == "" ]; then
-#   tasksel="1"
-#  fi
-
-#switch case for task selection
-#  case "$tasksel" in
-#   1) lxc_menu;;
-#   2) check_packages;;
-#   3) clone_stuff;;
-#   4) comp_cdda;;
-#   5) clone_stuff;;
-#   9) crit_err;;
-#   *) printf "\n$generrormsg $novalmsg No valid Entry, please try again\n";;
-#  esac 
-
-done
+ done

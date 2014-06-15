@@ -1,15 +1,15 @@
 #!/bin/bash
 ########################################################
 # TODO:
-# General:	UPDATE VARIABLE AND FUNCTION EXPLANATION
-#		find a way to run the script in the chroot
+# General: UPDATE VARIABLE AND FUNCTION EXPLANATION
+# find a way to run the script in the chroot
 #
-#		adapt dgl-create-chroot to not create a chroot but
-#		 use the lxc-container instead.
+# adapt dgl-create-chroot to not create a chroot but
+# use the lxc-container instead.
 #
 ########################################################
 # CREDITS:
-# Ideas and some parts from the original dgl-create-chroot 
+# Ideas and some parts from the original dgl-create-chroot
 # by joshk@triplehelix.org, modifications by jilles@stack.nl
 #
 # Plus modifications by paxed@alt.org and later on codehero@nerdpol.ch
@@ -43,7 +43,7 @@ MAIN_MENU_LIST="LXC Menu;DDA Menu;Set up Dgamelaunch;Check preinstall config;Eve
 DDA_TASKS="Chroot to LXC-Container;Check DDA Dependencies;Clone Cataclysm-DDA Git;Compile Cataclysm-DDA;Clone dgamelaunch Git;Compile dgamelaunch (NOT WORKING);set-up the game! (NOT WORKING);Everything (NOT WORKING);Main Menu;QUIT"
 LXC_TASKS="Check LXC Dependencies;Setup LXC CGroup;Generate and modify LXC configs;Setup LXC Container;Main Menu;QUIT"
 
-# setting paths 
+# setting paths
 DEFAULTDDAGIT="https://github.com/C0DEHERO/Cataclysm-DDA.git"
 DEFAULTDGAMEGIT="https://github.com/C0DEHERO/dgamelaunch.git"
 DEFAULTDDATARGET="/var/lib/lxc/$SERVERNAME/rootfs/opt/CDDA"
@@ -63,10 +63,11 @@ CHROOT="/var/lib/lxc/$SERVERNAME/rootfs"
 # dirs and files inside the container
 OPT="$CHROOT/opt"
 DGLROOT="$OPT/dgldir"
+DGLFILE="dgamelaunch.`date +%Y%m%d`"
 CDDASUBDIR="$DGLROOT/cdda"
 SHARE_DIR="$DGLROOT/share"
 CDDA_SHARED_FILES="$SHARE_DIR/cataclysm-dda"
-CDDABIN="$DEFAULTDDATARGET\cataclysm"
+CDDABIN="$DEFAULTDDATARGET/cataclysm"
 QLITE_DBFILE="$DGLROOT/dgamelaunch.db"
 
 
@@ -94,7 +95,6 @@ SELECTED_TASK="You have selected "
 
 # Error MSGs
 GENERRORMSG="\e[31mError\e[37m:"
-#NOCDDADIRGIVEN="\e[31mError\e[37m: No CDDA Dir given. Please run Step (2) first!\n\n" #seems unused
 DEPERRORMSG="$GENERRORMSG Dependencies missing!\nPlease run the following command to install the missing dependencies and try again:\n\n\taptitude install"
 NOVALMSG="No valid Entry!"
 
@@ -109,13 +109,13 @@ task_list()
  IFS=";"
 # generating task list
   printf "\n"
-  TASKSEL=0             # setting $TASKSEL to 0 to be able to count the tasks
+  TASKSEL=0 # setting $TASKSEL to 0 to be able to count the tasks
   for TASK in $MENU
    do
     TASKSEL=$((TASKSEL +1))
     printf "($TASKSEL) - %b\n" $TASK
   done
-  TASKSEL=1             # setting $TASKSEL to 1 to be the default task
+  TASKSEL=1 # setting $TASKSEL to 1 to be the default task
   printf "\n"
   printf "Please make your selection by entering the coresponding number, default is [1]: "
   read TASKSEL
@@ -140,7 +140,7 @@ main_menu()
    5) all_stuff;;
    9) crit_err;;
    *) printf "\n$GENERRORMSG $NOVALMSG No valid Entry, please try again\n";;
-  esac 
+  esac
 }
 
 dda_menu()
@@ -167,7 +167,7 @@ dda_menu()
 lxc_menu()
 {
  MENU="$LXC_TASKS"
- task_list 
+ task_list
 
 #switch case for lxc task selection
   case "$TASKSEL" in
@@ -178,14 +178,14 @@ lxc_menu()
    5) main_menu;;
    9) crit_err;;
    *) printf "\n$GENERRORMSG $NOVALMSG No valid Entry, please try again\n";;
-  esac 
+  esac
 }
 
 ###############################################
 # LXC Stuff
 ###############################################
 
-check_lxc_packages() 
+check_lxc_packages()
 {
  clear
  printf "$SELECTED_TASK to check for LXC Dependencies.\n"
@@ -205,7 +205,7 @@ lxc_cgroup()
  if [ "$(cat $FSTAB | grep cgroup)" == "" ]; then
   TARGET="$FSTAB_BACKUP"
   check_target_file
-  printf "backing up $FSTAB to $FSTAB_BACKUP!\n\n"  
+  printf "backing up $FSTAB to $FSTAB_BACKUP!\n\n"
   cp $FSTAB $FSTAB_BACKUP
 
   if [ $? -ne 0 ]; then
@@ -215,11 +215,11 @@ lxc_cgroup()
 
   printf "adding cgroup line to $FSTAB...\n\n"
 cat << EOF >> $FSTAB
-cgroup  /sys/fs/cgroup  cgroup  defaults  0   0
+cgroup /sys/fs/cgroup cgroup defaults 0 0
 EOF
 
   printf "trying to mount /sys/fs/cgroup...\n\n"
-  mount /sys/fs/cgroup 
+  mount /sys/fs/cgroup
 
   if [ $? -ne 0 ]; then
    printf "$GENERRORMSG\n\tMounting failed!\n\n"
@@ -229,7 +229,7 @@ EOF
  else
   printf "Skipping modification to $FSTAB:\n\tThere seemes to be a cgroup mountpoint allready!\n"
 
- fi 
+ fi
  read -p "$CONTINUE"
 }
 
@@ -304,15 +304,15 @@ lxc_create_network_bridge()
  else
   cat << EOF > $BRIDGE_CONFIG_FILE
 <network>
- <name>lxc</name>
- <uuid>e58bbb2b-4b27-807a-68c4-e182dcf47258</uuid>
- <forward mode='nat'/>
- <bridge name='lxcbr0' stp='off' delay='0' />
- <ip address='192.168.123.1' netmask='255.255.255.0'>
-   <dhcp>
-    <range start='192.168.123.100' end='192.168.123.254' />
-   </dhcp>
-  </ip>
+<name>lxc</name>
+<uuid>e58bbb2b-4b27-807a-68c4-e182dcf47258</uuid>
+<forward mode='nat'/>
+<bridge name='lxcbr0' stp='off' delay='0' />
+<ip address='192.168.123.1' netmask='255.255.255.0'>
+<dhcp>
+<range start='192.168.123.100' end='192.168.123.254' />
+</dhcp>
+</ip>
 </network>
 EOF
   printf "$DONEMSG\n"
@@ -373,7 +373,7 @@ check_lxc_container()
   if [ "$(lxc-ls)" == "$SERVERNAME" ]; then
    errornonfatal "LXC-Container $SERVERNAME allready exists...\n"
   else
-   ok "No LXC-Container named $SERVERNAME found...\n" 
+   ok "No LXC-Container named $SERVERNAME found...\n"
   fi
  }
 
@@ -400,7 +400,7 @@ check_create_folders()
      errornonfatal "$F exists\n"
      BAD_CHECKED_CREATE_FF+="$F "
     else
-     ok "$F does not exist\n"  
+     ok "$F does not exist\n"
     fi
    done
   TARGETS="$BAD_CHECKED_CREATE_FF"
@@ -417,7 +417,7 @@ check_create_files()
      errornonfatal "$F exists\n"
      BAD_CHECKED_CREATE_FF+="$F "
     else
-     ok "$F does not exist\n"  
+     ok "$F does not exist\n"
     fi
    done
   TARGETS="$BAD_CHECKED_CREATE_FF"
@@ -444,7 +444,7 @@ rm_existing_ff()
 
 ok()
  {
-  printf "\e[32mOK\e[37m: $@" >&2  
+  printf "\e[32mOK\e[37m: $@" >&2
  }
 
 errornonfatal()
@@ -475,7 +475,7 @@ print_missing_packages()
 
  if [ "$DEPERROR" == "1" ]; then
   INSTALLDEPS=""
-  printf  "Shall we install the missing dependencies? (y)es or (n)o:\n"
+  printf "Shall we install the missing dependencies? (y)es or (n)o:\n"
   read INSTALLDEPS
 
   if [ "$INSTALLDEPS" == "n" ]; then
@@ -550,7 +550,7 @@ chroot_to_lxc()
 chroot $CHROOT
 }
 
-check_dda_packages() 
+check_dda_packages()
 {
  clear
  printf "$SELECTED_TASK to check for rhe dependencies to _compile_ CDDA.\n"
@@ -625,6 +625,7 @@ crit_err()
 compile_stuff()
  {
   cd $TARGET_DIR
+  make clean
   make
  }
 
@@ -640,12 +641,13 @@ comp_dgame()
  {
   clear
   printf "Will now try to compile $DEFAULTDGAMEGIT in $DEFAULTDGAMETARGET...\n"
+  $DEFAULTDGAMETARGET/autogen.sh 
   TARGET_DIR="$DEFAULTDGAMETARGET"
   compile_stuff
  }
 
 ###################################################
-# DGAMELAUNCH STUFF 
+# DGAMELAUNCH STUFF
 ###################################################
 # this is in experimental state and far from working... i think
 dgamelaunch()
@@ -654,15 +656,15 @@ dgamelaunch()
    errornonfatal "Chroot $CHROOT already exists.\n\n"
   fi
 
-  if [ ! -e "$DEFAULTDGAMETARGET\dgamelaunch" ]; then
+  if [ ! -e "$DEFAULTDGAMETARGET/dgamelaunch" ]; then
    errorexit "Cannot find dgamelaunch in $DEFAULTDGAMETARGET\n\n"
   fi
 
   printf "Using $CHROOT for setup...\n"
 
-  LIBS="`findlibs dgamelaunch`"
+  LIBS="`findlibs $DEFAULTDGAMETARGET`"
 
-  mkdir -p $DGLROOT mail
+  mkdir -p $DGLROOT $CHROOT/mail
 
   cp "$DEFAULTDGAMETARGET/dgamelaunch" "$DGLROOT/$DGLFILE"
   ln -s "$DGLROOT/$DGLFILE" "$DGLROOT/dgamelaunch"
@@ -671,12 +673,12 @@ dgamelaunch()
   mkdir -p "$DGLROOT/userdata"
 
   printf "Copying dgamelaunch to chroot...\n"
-  cp "$DEFAULTDEGAMETARGET/examples/dgamelaunch.conf" "$DGLROOT"
+  cp "$DEFAULTDGAMETARGET/examples/dgamelaunch.conf" "$CHROOT/etc"
 
-  cp "$DEFAULTDEGAMETARGET/examples/dgl_menu_main_anon.txt" "$DGLROOT"
-  cp "$DEFAULTDEGAMETARGET/examples/dgl_menu_main_user.txt" "$DGLROOT"
-  cp "$DEFAULTDEGAMETARGET/examples/dgl_menu_watchmenu_help.txt" "$DGLROOT"
-  cp "$DEFAULTDEGAMETARGET/examples/dgl-banner" "$DGLROOT"
+  cp "$DEFAULTDGAMETARGET/examples/dgl_menu_main_anon.txt" "$CHROOT"
+  cp "$DEFAULTDGAMETARGET/examples/dgl_menu_main_user.txt" "$CHROOT"
+  cp "$DEFAULTDGAMETARGET/examples/dgl_menu_watchmenu_help.txt" "$CHROOT"
+  cp "$DEFAULTDGAMETARGET/examples/dgl-banner" "$CHROOT"
 
   mkdir "$CDDASUBDIR"
   if [ -n "$CDDABIN" -a ! -e "$CDDABIN" ]; then
@@ -689,7 +691,7 @@ dgamelaunch()
    echo "-copying $CDDABIN to $CDDABINFILE"
    cp "$CDDABIN" "$CDDABINFILE"
    echo "-creating symlink cataclysm to $CDDABINFILE"
-   ln -s "$CDDABINFILE" "CDDASUBDIR/cataclysm"
+   ln -s "$CDDABINFILE" "$CDDASUBDIR/cataclysm"
    LIBS="$LIBS `findlibs $CDDABIN`"
   fi
 
@@ -698,10 +700,10 @@ dgamelaunch()
 
   if [ -n "$CDDA_SHARED_FILES" -a -d "$CDDA_SHARED_FILES" ]; then
    printf "Copying Cataclysm-DDA shared data...\n"
-   cp -LR $CDDADIR$DATAFILES "$CDDA_SHARED_FILES"
+   cp -LR $DEFAULTDDATARGET/$DATAFILES "$CDDA_SHARED_FILES"
    SHARED_DATA="lua lang gfx"
    for F in $SHARED_DATA; do
-    cp -LR $CDDADIR$F "$CDDA_SHARED_FILES"
+    cp -LR $DEFAULTDDATARGET/$F "$CDDA_SHARED_FILES"
    done
   fi
 

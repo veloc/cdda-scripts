@@ -6,6 +6,14 @@
 #
 #		adapt dgl-create-chroot to not create a chroot but
 #		 use the lxc-container instead.
+#
+########################################################
+# CREDITS:
+# Ideas and some parts from the original dgl-create-chroot 
+# by joshk@triplehelix.org, modifications by jilles@stack.nl
+#
+# Plus modifications by paxed@alt.org and later on codehero@nerdpol.ch
+# more modifications and implementation into this script by veloc@web.de
 ########################################################
 # version history:
 # v.0.0.6 trying to implement the stuff from CODEHEROs dgl-create-chroot script
@@ -23,22 +31,53 @@ VERSION="v.0.0.6"
 ERROR="0"
 CRITICALERROR="0"
 
+#set servername
+SERVERNAME="Cataclysm"
+
 # packagelists
-DDA_PACKAGES="libncurses5-dev git-core g++ make autogen autoconf libncurses5 libncursesw5 libncursesw5-dev libncursesw5-dev bison flex sqlite3 libsqlite3-dev"
+DDA_PACKAGES="git-core g++ make autogen autoconf libncurses5 libncursesw5 libncurses5-dev libncursesw5-dev bison flex sqlite3 libsqlite3-dev libintl-perl libiconv-ruby"
 LXC_PACKAGES="sed debootstrap lxc libvirt-bin dnsmasq-base screen"
 
 # menu stuff
-MAIN_MENU_LIST="LXC Menu;DDA Menu;Everything (NOT WORKING!);QUIT"
+MAIN_MENU_LIST="LXC Menu;DDA Menu;Set up Dgamelaunch;Check preinstall config;Everything (NOT WORKING!);QUIT"
 DDA_TASKS="Chroot to LXC-Container;Check DDA Dependencies;Clone Cataclysm-DDA Git;Compile Cataclysm-DDA;Clone dgamelaunch Git;Compile dgamelaunch (NOT WORKING);set-up the game! (NOT WORKING);Everything (NOT WORKING);Main Menu;QUIT"
 LXC_TASKS="Check LXC Dependencies;Setup LXC CGroup;Generate and modify LXC configs;Setup LXC Container;Main Menu;QUIT"
 
-# setting default values
+# setting paths 
 DEFAULTDDAGIT="https://github.com/C0DEHERO/Cataclysm-DDA.git"
 DEFAULTDGAMEGIT="https://github.com/C0DEHERO/dgamelaunch.git"
-DEFAULTDDATARGET="/var/lib/lxc/cataclysm/rootfs/opt/CDDA/"
-DEFAULTDGAMETARGET="/var/lib/lxc/cataclysm/rootfs/opt/CDDA/dgamelaunch/"
-CHROOT="/var/lib/lxc/cataclysm/rootfs"
+DEFAULTDDATARGET="/var/lib/lxc/$SERVERNAME/rootfs/opt/CDDA"
+DEFAULTDGAMETARGET="$DEFAULTDDATARGET/dgamelaunch"
+
+FSTAB="/etc/fstab"
+FSTAB_BACKUP="/etc/fstab.backup.lxc_cgroup"
+
+LXC_TEMPLATE="/usr/lib64/lxc/templates/lxc-debian"
+LXC_TEMP="/tmp/lxc-debian"
+LXC_SERVER="http://ftp5.gwdg.de/pub/linux/debian/debian"
+
+LXC_NET_CONFIG="/lxc/$SERVERNAME/config"
 BRIDGE_CONFIG_FILE="/etc/libvirt/qemu/networks/lxc.xml"
+CHROOT="/var/lib/lxc/$SERVERNAME/rootfs"
+
+# dirs and files inside the container
+OPT="$CHROOT/opt"
+DGLROOT="$OPT/dgldir"
+CDDASUBDIR="$DGLROOT/cdda"
+SHARE_DIR="$DGLROOT/share"
+CDDA_SHARED_FILES="$SHARE_DIR/cataclysm-dda"
+CDDABIN="$DEFAULTDDATARGET\cataclysm"
+QLITE_DBFILE="$DGLROOT/dgamelaunch.db"
+
+
+CREATE_FILES="$FSTAB_BACKUP $LXC_NET_CONFIG $LXC_TEMP $BRIDGE_CONFIG_FILE $QLITE_DBFILE"
+CREATE_FOLDERS="$DEFAULTDDATARGET $DEFAULTDGAMETARGET $CHROOT"
+
+NEEDED_FILES="$FSTAB $LXC_TEMPLATE"
+
+# the user & group from dgamelaunch config file.
+USRGRP="games:games"
+
 
 # strings
 DEPMISSINGMSG="\e[31mMissing!\e[37m"
@@ -71,7 +110,7 @@ task_list()
 # generating task list
   printf "\n"
   TASKSEL=0             # setting $TASKSEL to 0 to be able to count the tasks
-  for TASK in $menu
+  for TASK in $MENU
    do
     TASKSEL=$((TASKSEL +1))
     printf "($TASKSEL) - %b\n" $TASK
@@ -89,14 +128,16 @@ task_list()
 
 main_menu()
 {
- menu="$MAIN_MENU_LIST"
+ MENU="$MAIN_MENU_LIST"
  task_list
 
 #switch case for task selection
   case "$TASKSEL" in
    1) lxc_menu;;
    2) dda_menu;;
-   3) all_stuff;;
+   3) dgamelaunch;;
+   4) check_preinstall_config;;
+   5) all_stuff;;
    9) crit_err;;
    *) printf "\n$GENERRORMSG $NOVALMSG No valid Entry, please try again\n";;
   esac 
@@ -104,7 +145,7 @@ main_menu()
 
 dda_menu()
 {
- menu="$DDA_TASKS"
+ MENU="$DDA_TASKS"
  task_list
 
 #switch case for task selection
@@ -125,7 +166,7 @@ dda_menu()
 
 lxc_menu()
 {
- menu="$LXC_TASKS"
+ MENU="$LXC_TASKS"
  task_list 
 
 #switch case for lxc task selection
@@ -158,8 +199,6 @@ check_lxc_packages()
 lxc_cgroup()
 {
  clear
- FSTAB="/etc/fstab"
- FSTAB_BACKUP="/etc/fstab.backup.lxc_cgroup"
 
  printf "$SELECTED_TASK to set up the cgroup-Mountpouint for LXC.\n"
 
@@ -233,21 +272,20 @@ lxc_mod_template()
 lxc_create_network_config()
 {
  printf "Creating lxc-container network config dir... "
- mkdir -p /lxc/cataclysm/
+ mkdir -p /lxc/$SERVERNAME/
  if [ $? -ne 0 ]; then
-  printf "$GENERRORMSG\n\tUnable to create /lxc/cataclysm/\n\n"
+  printf "$GENERRORMSG\n\tUnable to create /lxc/$SERVERNAME\n\n"
   return 1
  else
   printf "$DONEMSG\n"
  fi
 
  printf "Creating lxc-container network config file... "
- CAT_CONFIG="/lxc/cataclysm/config"
- if [ -f "$CAT_CONFIG" ]; then
-  printf "$GENERRORMSG\n\t$CAT_CONFIG allready exists!\n\n"
+ if [ -f "$LXC_NET_CONFIG" ]; then
+  printf "$GENERRORMSG\n\t$LXC_NET_CONFIG allready exists!\n\n"
 
  else
-  cat << EOF > $CAT_CONFIG
+  cat << EOF > $LXC_NET_CONFIG
 lxc.network.type = veth
 lxc.network.flags = up
 lxc.network.link = lxcbr0
@@ -284,9 +322,6 @@ EOF
 lxc_mod_configs()
 {
  clear
- LXC_TEMPLATE="/usr/lib64/lxc/templates/lxc-debian"
- LXC_TEMP="/tmp/lxc-debian"
- LXC_SERVER="http://ftp5.gwdg.de/pub/linux/debian/debian"
 
  printf "$SELECTED_TASK to modify the debian template generation file and create a config file for the network of the container\n\n"
 
@@ -313,12 +348,127 @@ setup_lxc_container()
 
  printf "Creating container, this may take some time... \n"
  read -p "$CONTINUE\n"
- lxc-create -n cataclysm -t debian -f /lxc/cataclysm/config
+ lxc-create -n $SERVERNAME -t debian -f /lxc/$SERVERNAME/config
 }
 
 ####################################################
 # GENERAL
 ####################################################
+check_preinstall_config()
+ {
+  CHECK_TASK="$CREATE_FILES"
+  check_create_files
+  CHECK_TASK="$CREATE_FOLDERS"
+  check_create_folders
+  check_needed_files
+  PACKAGES="$LXC_PACKAGES"
+  check_packages
+  PACKAGES="$DDA_PACKAGES"
+  check_packages
+  check_lxc_container
+ }
+
+check_lxc_container()
+ {
+  if [ "$(lxc-ls)" == "$SERVERNAME" ]; then
+   errornonfatal "LXC-Container $SERVERNAME allready exists...\n"
+  else
+   ok "No LXC-Container named $SERVERNAME found...\n" 
+  fi
+ }
+
+check_needed_files()
+ {
+  printf "\nChecking for needed files:\n\n"
+  for F in $NEEDED_FILES
+   do
+    if [ -f "$F" ]; then
+     ok "$F found...\n"
+    else
+     errornonfatal "$F not found!\n"
+    fi
+   done
+ }
+
+check_create_folders()
+ {
+  BAD_CHECKED_CREATE_FF=""
+  printf "\nChecking for existing files which shouldn't be there:\n\n"
+  for F in $CHECK_TASK
+   do
+    if [ -d "$F" ]; then
+     errornonfatal "$F exists\n"
+     BAD_CHECKED_CREATE_FF+="$F "
+    else
+     ok "$F does not exist\n"  
+    fi
+   done
+  TARGETS="$BAD_CHECKED_CREATE_FF"
+  rm_existing_ff
+ }
+
+check_create_files()
+ {
+  BAD_CHECKED_CREATE_FF=""
+  printf "\nChecking for existing files which shouldn't be there:\n\n"
+  for F in $CHECK_TASK
+   do
+    if [ -f "$F" ]; then
+     errornonfatal "$F exists\n"
+     BAD_CHECKED_CREATE_FF+="$F "
+    else
+     ok "$F does not exist\n"  
+    fi
+   done
+  TARGETS="$BAD_CHECKED_CREATE_FF"
+  rm_existing_ff
+ }
+
+rm_existing_ff()
+{
+ if [ "$TARGETS" != "" ]; then
+  printf "\nShould the allready existing files or folders be removed? Please type \"Yes\", every other entry will cancel deletion!\n"
+  read YESNO
+  if [ "$YESNO" == "Yes" ]; then
+   printf "\n\nNO BACKUP WILL BE MADE!\n\n"
+   for F in $TARGETS
+    do
+     printf "Deleting $F...\n"
+     rm -fr $F
+    done
+  else
+   printf "Not deleting anything...\n"
+  fi
+ fi
+ }
+
+ok()
+ {
+  printf "\e[32mOK\e[37m: $@" >&2  
+ }
+
+errornonfatal()
+ {
+  printf "\e[33mWarning\e[37m: $@" >&2
+ }
+
+errorexit()
+ {
+  printf "\e[31mError\e[37m: $@" >&2
+  exit 1
+ }
+
+# needed?
+findlibs()
+{
+  for i in "$@"; do
+      if [ -z "`ldd "$i" | grep 'not a dynamic executable'`" ]; then
+         echo $(ldd "$i" | awk '{ print $3 }' | egrep -v ^'\(')
+         echo $(ldd "$i" | grep 'ld-linux' | awk '{ print $1 }')
+      fi
+  done
+}
+
 print_missing_packages()
 {
  printf "\nMissing Packages:\n$MISSING\n\n"
@@ -398,7 +548,6 @@ check_target_dir()
 chroot_to_lxc()
 {
 chroot $CHROOT
-# CHROOT /var/lib/lxc/cataclysm/rootfs
 }
 
 check_dda_packages() 
@@ -495,8 +644,81 @@ comp_dgame()
   compile_stuff
  }
 
+###################################################
+# DGAMELAUNCH STUFF 
+###################################################
+# this is in experimental state and far from working... i think
+dgamelaunch()
+ {
+  if [ -e "$CHROOT" ]; then
+   errornonfatal "Chroot $CHROOT already exists.\n\n"
+  fi
+
+  if [ ! -e "$DEFAULTDGAMETARGET\dgamelaunch" ]; then
+   errorexit "Cannot find dgamelaunch in $DEFAULTDGAMETARGET\n\n"
+  fi
+
+  printf "Using $CHROOT for setup...\n"
+
+  LIBS="`findlibs dgamelaunch`"
+
+  mkdir -p $DGLROOT mail
+
+  cp "$DEFAULTDGAMETARGET/dgamelaunch" "$DGLROOT/$DGLFILE"
+  ln -s "$DGLROOT/$DGLFILE" "$DGLROOT/dgamelaunch"
+
+  mkdir -p "$DGLROOT/inprogress-cdda"
+  mkdir -p "$DGLROOT/userdata"
+
+  printf "Copying dgamelaunch to chroot...\n"
+  cp "$DEFAULTDEGAMETARGET/examples/dgamelaunch.conf" "$DGLROOT"
+
+  cp "$DEFAULTDEGAMETARGET/examples/dgl_menu_main_anon.txt" "$DGLROOT"
+  cp "$DEFAULTDEGAMETARGET/examples/dgl_menu_main_user.txt" "$DGLROOT"
+  cp "$DEFAULTDEGAMETARGET/examples/dgl_menu_watchmenu_help.txt" "$DGLROOT"
+  cp "$DEFAULTDEGAMETARGET/examples/dgl-banner" "$DGLROOT"
+
+  mkdir "$CDDASUBDIR"
+  if [ -n "$CDDABIN" -a ! -e "$CDDABIN" ]; then
+   errorexit "Cannot find Cataclysm-DDA binary $CDDABIN"
+  fi
+
+  if [ -n "$CDDABIN" -a -e "$CDDABIN" ]; then
+   echo "Copying $CDDABIN"
+   CDDABINFILE="`basename $CDDABIN`.`date +%Y%m%d`"
+   echo "-copying $CDDABIN to $CDDABINFILE"
+   cp "$CDDABIN" "$CDDABINFILE"
+   echo "-creating symlink cataclysm to $CDDABINFILE"
+   ln -s "$CDDABINFILE" "CDDASUBDIR/cataclysm"
+   LIBS="$LIBS `findlibs $CDDABIN`"
+  fi
+
+  mkdir -p "$CDDA_SHARED_FILES"
+  DATAFILES="data/*"
+
+  if [ -n "$CDDA_SHARED_FILES" -a -d "$CDDA_SHARED_FILES" ]; then
+   printf "Copying Cataclysm-DDA shared data...\n"
+   cp -LR $CDDADIR$DATAFILES "$CDDA_SHARED_FILES"
+   SHARED_DATA="lua lang gfx"
+   for F in $SHARED_DATA; do
+    cp -LR $CDDADIR$F "$CDDA_SHARED_FILES"
+   done
+  fi
+
+# 2 be rewritten:
+  printf "Go to $CHROOT, execute dgamelaunch as root, and create an 'admin' user before setting up ssh/telnet!\n\n"
+
+  printf "Go to\n\t$CHROOT\n\execute dgamelaunch as root, and create an 'admin' user before setting up ssh/telnet!\n\n"
+
+  printf "You should also use this opportunity to test if Cataclysm-DDA runs, if it doesn't please contact me at codehero@nerdpol.ch or C0DEHERO on github.\n\n"
+
+  printf "Finished.\n\n"
+ }
+
+
+###################################################
 # MORE STUFF
-########################################################
+###################################################
 # Welcome
 clear
 echo -e $WELCOMEMSG
